@@ -22,6 +22,7 @@ router.get('/', async (req, res) => {
         name: personalInfo.name,
         email: personalInfo.email,
         phone: personalInfo.phone,
+        summary: personalInfo.summary, // Novo campo: resumo
       },
       experiences: experiencesResult.rows.map(exp => ({
         id: exp.id,
@@ -35,6 +36,7 @@ router.get('/', async (req, res) => {
         id: skill.id,
         name: skill.name,
         proficiency: skill.proficiency,
+        description: skill.description,
       })),
     });
   } catch (err) {
@@ -43,18 +45,18 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Rota POST para criar novas informações no currículo
+// Rota POST para criar um novo currículo
 router.post('/', async (req, res) => {
   try {
-    const { name, email, phone, experiences, skills } = req.body;
+    const { name, email, phone, summary, experiences, skills } = req.body;
 
     if (!name || !email || !phone) {
       return res.status(400).json({ message: 'Os campos nome, email e telefone são obrigatórios' });
     }
 
     const personalInfoResult = await pool.query(
-      'INSERT INTO personal_info (name, email, phone) VALUES ($1, $2, $3) RETURNING *',
-      [name, email, phone]
+      'INSERT INTO personal_info (name, email, phone, summary) VALUES ($1, $2, $3, $4) RETURNING *',
+      [name, email, phone, summary] // Incluir o campo summary
     );
 
     const personalInfoId = personalInfoResult.rows[0].id;
@@ -71,8 +73,8 @@ router.post('/', async (req, res) => {
     if (skills && skills.length > 0) {
       for (const skill of skills) {
         await pool.query(
-          'INSERT INTO skills (name, proficiency, personal_info_id) VALUES ($1, $2, $3)',
-          [skill.name, skill.proficiency, personalInfoId]
+          'INSERT INTO skills (name, proficiency, description, personal_info_id) VALUES ($1, $2, $3, $4)',
+          [skill.name, skill.proficiency, skill.description, personalInfoId]
         );
       }
     }
@@ -90,7 +92,7 @@ router.post('/', async (req, res) => {
 // Rota PUT para atualizar informações pessoais
 router.put('/:id', async (req, res) => {
   const { id } = req.params;
-  const { name, email, phone } = req.body;
+  const { name, email, phone, summary } = req.body;
 
   if (!name || !email || !phone) {
     return res.status(400).json({ message: 'Os campos nome, email e telefone são obrigatórios' });
@@ -98,8 +100,8 @@ router.put('/:id', async (req, res) => {
 
   try {
     const result = await pool.query(
-      'UPDATE personal_info SET name = $1, email = $2, phone = $3 WHERE id = $4 RETURNING *',
-      [name, email, phone, id]
+      'UPDATE personal_info SET name = $1, email = $2, phone = $3, summary = $4 WHERE id = $5 RETURNING *',
+      [name, email, phone, summary, id] // Incluir o campo summary
     );
 
     if (result.rows.length === 0) {
@@ -131,6 +133,54 @@ router.delete('/:id', async (req, res) => {
   } catch (err) {
     console.error('Erro ao excluir currículo:', err.message);
     res.status(500).json({ error: 'Erro ao excluir currículo' });
+  }
+});
+
+// Rota POST para adicionar uma nova experiência
+router.post('/experiences', async (req, res) => {
+  try {
+    const { companyName, position, startDate, endDate, description, personalInfoId } = req.body;
+
+    if (!companyName || !position || !startDate || !personalInfoId) {
+      return res.status(400).json({ message: 'Os campos companyName, position, startDate e personalInfoId são obrigatórios' });
+    }
+
+    const result = await pool.query(
+      'INSERT INTO experiences (company_name, position, start_date, end_date, description, personal_info_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [companyName, position, startDate, endDate, description, personalInfoId]
+    );
+
+    res.status(201).json({
+      message: 'Experiência adicionada com sucesso!',
+      experience: result.rows[0],
+    });
+  } catch (err) {
+    console.error('Erro ao adicionar experiência:', err.message);
+    res.status(500).json({ error: 'Erro ao adicionar experiência' });
+  }
+});
+
+// Rota POST para adicionar uma nova skill
+router.post('/skills', async (req, res) => {
+  try {
+    const { name, proficiency, description, personalInfoId } = req.body;
+
+    if (!name || !proficiency || !personalInfoId) {
+      return res.status(400).json({ message: 'Os campos name, proficiency e personalInfoId são obrigatórios' });
+    }
+
+    const result = await pool.query(
+      'INSERT INTO skills (name, proficiency, description, personal_info_id) VALUES ($1, $2, $3, $4) RETURNING *',
+      [name, proficiency, description, personalInfoId]
+    );
+
+    res.status(201).json({
+      message: 'Skill adicionada com sucesso!',
+      skill: result.rows[0],
+    });
+  } catch (err) {
+    console.error('Erro ao adicionar skill:', err.message);
+    res.status(500).json({ error: 'Erro ao adicionar skill' });
   }
 });
 
